@@ -1,0 +1,44 @@
+name: Docker
+
+on:
+  push:
+    branches: [ develop ]
+
+env:
+  SERVICE_NAME: ${{ github.event.repository.name }}
+  RUN_REGION: us-west1-c
+  COMMIT_SHA: ${{ github.sha }}
+  #PORT: 8080
+
+jobs:
+
+    deploy:
+
+        name: Setup Gcloud Account
+        runs-on: ubuntu-latest
+        env:
+          IMAGE_NAME: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_APP_NAME }}
+        steps:
+
+        - name: Login
+          uses: google-github-actions/setup-gcloud@master
+          with:
+            GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+            service_account_email: ${{ secrets.GCP_EMAIL }}
+            service_account_key: ${{ secrets.GCP_CREDENTIALS }}
+
+        - name: Configure Docker
+          run: gcloud auth configure-docker --quiet
+
+        - name: Checkout repository
+          uses: actions/checkout@v2
+
+        - name: Build Docker image
+          run: docker build . -t $IMAGE_NAME
+
+        - name: Push Docker image
+          run: docker push $IMAGE_NAME
+
+        - name: Deploy Docker image
+          run: gcloud run deploy $SERVICE_NAME --project ${{ secrets.GCP_PROJECT_ID }} --port=80 --service-account ${{ secrets.GCP_EMAIL }} --set-env-vars GCP_PROJECT_ID=${{ secrets.GCP_DEV_PROJECT_UID }} --set-env-vars GCP_PROJECT_NAME=${{ secrets.GCP_PROJECT_ID }} --set-env-vars GCP_CREDENTIALS=${{ secrets.GCP_DEV_CREDENTIALS }} --memory 2G --min-instances 1 --image $IMAGE_NAME --region us-west1 --allow-unauthenticated --platform managed
+          
